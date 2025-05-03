@@ -8,6 +8,12 @@ function Create-ContactLists {
 	)
 
 	Write-Section "Creating Contact Lists"
+	
+    $currentDirectory = (Get-Location).Path
+ 
+    if (-not $currentDirectory.EndsWith('\')) {
+        $currentDirectory = $currentDirectory + '\'
+    }
 
 	$directoriesWithImages = Get-DirectoriesWithImages
 	$totalDirs = $directoriesWithImages.Count
@@ -63,9 +69,9 @@ function Create-ContactLists {
 	
 			if ($contactListChunks.Count -gt 1) {
 				$chunkFiles = Get-TempFiles | Sort-Object Name
-				$chunkFilePaths = Extract-Rel-Paths . $chunkFiles
+				$chunkFilePaths = Extract-RelativePaths $currentDirectory $chunkFiles
 				$joinedPaths = $chunkFilePaths -join ' '
-				
+
 				# Create and run montage command
 				$cmd = "magick montage $joinedPaths -tile 1x -geometry +0+0> `"$($contactListName).jpg`""
 				Invoke-Expression $cmd
@@ -75,7 +81,7 @@ function Create-ContactLists {
 			
 			# Remove each file
 			Get-TempFiles | ForEach-Object {
-				Remove-Item $_ -Force
+				Remove-Item -LiteralPath $_.FullName -Force
 				Write-Log "$directoryPrefix Removed: $_"
 			}
 	
@@ -84,10 +90,16 @@ function Create-ContactLists {
 			$contactListNumber += 1
 		}
 
-		if (Test-Path "./$directoryName.zip") {
+		if (Test-Path -LiteralPath "./$directoryName.zip") {
 			Write-Warning "$directoryPrefix Archive with the directory name already exists. Skipped the step"
 		} else {
-			Compress-Archive -Path "$path\*" -DestinationPath "$($path).zip" -Force
+			$compress = @{
+				LiteralPath = Get-ChildItem -LiteralPath $path | ForEach-Object { $_.FullName }
+				CompressionLevel = "Fastest"
+				DestinationPath = "$($path).zip"
+			}
+
+			Compress-Archive @compress
 	
 			Write-Success "$directoryPrefix Compressed directory"
 		}

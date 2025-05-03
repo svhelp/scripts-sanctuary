@@ -9,7 +9,7 @@ function Verify-Contactlists {
 	)
 
     Write-Section "Verification"
-
+    
     $directoriesWithImages = Get-DirectoriesWithImages
     $totalDirs = $directoriesWithImages.Count
     $currentDir = 1
@@ -26,7 +26,7 @@ function Verify-Contactlists {
 
         $expectedArchivePath = ".\$_.zip"
 
-        if (Test-Path $expectedArchivePath) {
+        if (Test-Path -LiteralPath $expectedArchivePath) {
             $archiveSize = (Get-Item -LiteralPath $expectedArchivePath).Length
             $dirSize = (Get-ChildItem -LiteralPath "$path" -Recurse -File | Measure-Object -Property Length -Sum).Sum
             $sizeDeviation = ($dirSize - $archiveSize) / $dirSize * 100
@@ -48,7 +48,7 @@ function Verify-Contactlists {
         for ($i = 0; $i -lt $expectedContactListsCount; $i += 1) {
             $expectedContactListName = if ($expectedContactListsCount -gt 1) { ".\$($_)_$($i + 1).jpg" } else { ".\$_.jpg" }
             
-            if (!(Test-Path $expectedContactListName)) {
+            if (!(Test-Path -LiteralPath $expectedContactListName)) {
                 $success = $false
                 Write-Error "$directoryPrefix lacks contact lists"
 
