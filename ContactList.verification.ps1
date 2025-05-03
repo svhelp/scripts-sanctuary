@@ -10,8 +10,7 @@ function Verify-Contactlists {
 
     Write-Section "Verification"
 
-    $directoriesWithImages = Get-ChildItem -Path . -Directory | Where-Object { (Get-SupportedImages $_.FullName).Count -gt 0 }
-
+    $directoriesWithImages = Get-DirectoriesWithImages
     $totalDirs = $directoriesWithImages.Count
     $currentDir = 1
 
@@ -58,15 +57,13 @@ function Verify-Contactlists {
         }
 
         if ($success) {
-            Write-Success "$directoryPrefix successgully processed"
+            Write-Success "$directoryPrefix successfully processed"
         }
 
         $currentDir += 1
     }
 
-    $tempFiles = Get-ChildItem -LiteralPath . | Where-Object { $_.Extension.ToLower() -match '\.part' }
-
-    if ($tempFiles.Count -gt 0) {
+    if ((Get-TempFiles).Count -gt 0) {
         Write-Error "Temp files left in the directory"
     }
 }

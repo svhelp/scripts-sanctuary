@@ -1,4 +1,6 @@
-$OutputEncoding = [System.Text.Encoding]::UTF8
+. "$PSScriptRoot\utils.ps1"
+. "$PSScriptRoot\ContactList.core.ps1"
+. "$PSScriptRoot\ContactList.verification.ps1"
 
 $chunkSize = 60
 $contactListSize = 210
@@ -9,97 +11,100 @@ if (-not $currentDirectory.EndsWith('\')) {
     $currentDirectory = $currentDirectory + '\'
 }
 
-# Build quoted list of file paths
-function Extract-Rel-Paths {
+function Create-ContactLists {
 	param (
-		[string]$Root,
-		[System.Object]$Files
+		[int]$ContactListSize,
+		[int]$ChunkSize
 	)
 
-	return $Files | ForEach-Object {
-		$absolutePath = $_.FullName
-		$relativeUri = (New-Object System.Uri($Root)).MakeRelativeUri($absolutePath)
-		$relativePath = [System.Uri]::UnescapeDataString($relativeUri.ToString()) -replace '/', '\'
-		
-		'"' + $relativePath + '"'
-	}
-}
+	Write-Section "Creating Contact Lists"
 
-Get-ChildItem -Path . -Directory | ForEach-Object {
-    $folder = $_.FullName
-    $contactListNamePrefix = "$($_.Name)"
-    $images = Get-ChildItem -LiteralPath "$folder" | Where-Object { $_.Extension.ToLower() -match '\.jpg|\.jpeg|\.png' } | Sort-Object Name
+	$directoriesWithImages = Get-DirectoriesWithImages
+	$totalDirs = $directoriesWithImages.Count
+	$currentDir = 1
 
-    if ($images.Count -eq 0) {
-        Write-Host "⚠️ No images found in '$folder'"
-		return
-    }	
-	
-	$imagePaths = Extract-Rel-Paths $folder $images
-	
-	$contactLists = @()
+	$directoriesWithImages | ForEach-Object {
+        $directoryPrefix = "[$currentDir/$totalDirs] `"$_`""
+        $path = $_.FullName
+        $directoryName = $_.Name
+		$contactListNamePrefix = "$($_.Name)"
 
-	for ($i = 0; $i -lt $imagePaths.Count; $i += $contactListSize) {
-		$group = $imagePaths[$i..([math]::Min($i + $contactListSize - 1, $imagePaths.Count - 1))]
-		$contactLists += ,@($group)  # comma ensures each group is added as an array
-	}
+		Write-Log "$directoryPrefix Started processing..."
 
-	$contactListNumber = 1
-	
-	# Now $contactLists is an array of arrays
-	$contactLists | ForEach-Object {
-		$contactListName = if ($contactLists.Count -eq 1) { $contactListNamePrefix } else { "$($contactListNamePrefix)_$($contactListNumber)" }
+		$images = Get-SupportedImages "$path" | Sort-Object Name
+		$imagePaths = @(Extract-RelativePaths $path $images)
 
-		$contactListChunks = @()
+		$contactLists = @()
 
-		for ($i = 0; $i -lt $_.Count; $i += $chunkSize) {
-			$chunk = $_[$i..([math]::Min($i + $chunkSize - 1, $_.Count - 1))]
-			$contactListChunks += ,@($chunk)  # comma ensures each group is added as an array
-		}
-		
-		$chunkNumber = 1
-
-		$contactListChunks | ForEach-Object {
-			$joinedPaths = $_ -join ' '
-			$chunkName = if ($contactListChunks.Count -eq 1) { $contactListName } else { "$($contactListName)_$($chunkNumber).part" }
-
-			# Create and run montage command
-			$cmd = "magick montage -label `"%f`" $joinedPaths -tile 6x -geometry 200x200+5+5> `"$($chunkName).jpg`""
-			Invoke-Expression $cmd
-			
-			Write-Host "✅ Created contact sheet chunk: $chunkName"
-
-			$chunkNumber += 1
+		for ($i = 0; $i -lt $imagePaths.Count; $i += $ContactListSize) {
+			$group = $imagePaths[$i..([math]::Min($i + $ContactListSize - 1, $imagePaths.Count - 1))]
+			$contactLists += ,@($group)  # comma ensures each group is added as an array
 		}
 
-		if ($contactListChunks.Count -gt 1) {
-			$chunkFiles = Get-ChildItem -LiteralPath "$currentDirectory" | Where-Object { $_.Name -like "*.part.jpg" } | Sort-Object Name
-			$chunkFilePaths = Extract-Rel-Paths $currentDirectory $chunkFiles
-			$joinedPaths = $chunkFilePaths -join ' '
-			
-			# Create and run montage command
-			$cmd = "magick montage $joinedPaths -tile 1x -geometry +0+0> `"$($contactListName).jpg`""
-			Invoke-Expression $cmd
+		$contactListNumber = 1
+	
+		# Now $contactLists is an array of arrays
+		$contactLists | ForEach-Object {
+			$contactListName = if ($contactLists.Count -eq 1) { $contactListNamePrefix } else { "$($contactListNamePrefix)_$($contactListNumber)" }
 
-			Write-Host "✅ Joined chunks"
-
-			# Remove each file
-			$chunkFiles | ForEach-Object {
-				if (Test-Path $_) {
-					Remove-Item $_ -Force
-					Write-Host "🗑️ Removed: $_"
-				} else {
-					Write-Host "⚠️ File not found: $_"
-				}
+			$contactListChunks = @()
+	
+			for ($i = 0; $i -lt $_.Count; $i += $ChunkSize) {
+				$chunk = $_[$i..([math]::Min($i + $ChunkSize - 1, $_.Count - 1))]
+				$contactListChunks += ,@($chunk)  # comma ensures each group is added as an array
 			}
+			
+			$chunkNumber = 1
+	
+			$contactListChunks | ForEach-Object {
+				$joinedPaths = $_ -join ' '
+				$chunkName = if ($contactListChunks.Count -eq 1) { $contactListName } else { "$($contactListName)_$($chunkNumber).part" }
+	
+				# Create and run montage command
+				$cmd = "magick montage -label `"%f`" $joinedPaths -tile 6x -geometry 200x200+5+5> `"$($chunkName).jpg`""
+				Invoke-Expression $cmd
+				
+				if ($contactListChunks.Count -gt 1) {
+					Write-Log "$directoryPrefix Created contact sheet chunk: $chunkName"
+				}
+	
+				$chunkNumber += 1
+			}
+	
+			if ($contactListChunks.Count -gt 1) {
+				$chunkFiles = Get-TempFiles | Sort-Object Name
+				$chunkFilePaths = Extract-Rel-Paths . $chunkFiles
+				$joinedPaths = $chunkFilePaths -join ' '
+				
+				# Create and run montage command
+				$cmd = "magick montage $joinedPaths -tile 1x -geometry +0+0> `"$($contactListName).jpg`""
+				Invoke-Expression $cmd
+	
+				Write-Log "$directoryPrefix Merged chunks"
+			}
+			
+			# Remove each file
+			Get-TempFiles | ForEach-Object {
+				Remove-Item $_ -Force
+				Write-Log "$directoryPrefix Removed: $_"
+			}
+	
+			Write-Success "$directoryPrefix Created contact list"
+			
+			$contactListNumber += 1
 		}
 
-		Write-Host "✅ Created contact sheet: $contactListName"
-		
-		$contactListNumber += 1
+		if (Test-Path "./$directoryName.zip") {
+			Write-Warning "$directoryPrefix Archive with the directory name already exists. Skipped the step"
+		} else {
+			Compress-Archive -Path "$path\*" -DestinationPath "$($path).zip" -Force
+	
+			Write-Success "$directoryPrefix Compressed directory"
+		}
+
+		$currentDir += 1
 	}
-	
-	Compress-Archive -Path "$folder\*" -DestinationPath "$($folder).zip" -Force
-	
-	Write-Host "✅ Compressed directory: $folder"
 }
+
+Create-ContactLists $contactListSize $chunkSize
+Verify-Contactlists $contactListSize
