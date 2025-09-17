@@ -3,7 +3,7 @@
 . "$PSScriptRoot\ContactList.process.ps1"
 . "$PSScriptRoot\ContactList.verification.ps1"
 
-$chunkSize = 60
+$chunkSize = 30
 $contactListSize = 210
 
 Create-ContactLists $contactListSize $chunkSize

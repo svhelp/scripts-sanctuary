@@ -20,7 +20,8 @@ function Create-ContactLists {
 	$currentDir = 1
 
 	$directoriesWithImages | ForEach-Object {
-        $directoryPrefix = "[$currentDir/$totalDirs] `"$_`""
+        $directoryShortPrefix = "[$currentDir/$totalDirs]"
+        $directoryPrefix = "$directoryShortPrefix `"$_`""
         $path = $_.FullName
         $directoryName = $_.Name
 		$contactListNamePrefix = "$($_.Name)"
@@ -61,7 +62,7 @@ function Create-ContactLists {
 				Invoke-Expression $cmd
 				
 				if ($contactListChunks.Count -gt 1) {
-					Write-Log "$directoryPrefix Created contact sheet chunk: $chunkName"
+					Write-Log "$directoryShortPrefix Created contact sheet chunk: $chunkName"
 				}
 	
 				$chunkNumber += 1
@@ -76,16 +77,16 @@ function Create-ContactLists {
 				$cmd = "magick montage $joinedPaths -tile 1x -geometry +0+0> `"$($contactListName).jpg`""
 				Invoke-Expression $cmd
 	
-				Write-Log "$directoryPrefix Merged chunks"
+				Write-Log "$directoryShortPrefix Merged chunks"
 			}
 			
 			# Remove each file
 			Get-TempFiles | ForEach-Object {
 				Remove-Item -LiteralPath $_.FullName -Force
-				Write-Log "$directoryPrefix Removed: $_"
+				Write-Log "$directoryShortPrefix Removed: $_"
 			}
 	
-			Write-Success "$directoryPrefix Created contact list"
+			Write-Success "$directoryPrefix Created contact sheet ($contactListNumber)"
 			
 			$contactListNumber += 1
 		}
