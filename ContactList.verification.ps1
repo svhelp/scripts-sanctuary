@@ -5,12 +5,19 @@ $zipSizeDeviationThreshold = 5
 
 function Verify-Contactlists {
 	param (
-		[int]$ContactListSize
+		[int]$ContactListSize,
+		[switch]$OneImagePerLevel
 	)
 
     Write-Section "Verification"
     
-    $directoriesWithImages = Get-DirectoriesWithImages
+	$directoriesWithImages = if ($OneImagePerLevel.IsPresent)
+		{
+			Get-ChildItem -Path . -Directory
+		} else {
+			Get-DirectoriesWithImages
+		}
+        
     $totalDirs = $directoriesWithImages.Count
     $currentDir = 1
 

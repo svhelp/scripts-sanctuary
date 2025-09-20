@@ -1,10 +1,13 @@
 . "$PSScriptRoot\utils.ps1"
 . "$PSScriptRoot\ContactList.core.ps1"
 
+Add-Type -AssemblyName System.IO.Compression.FileSystem
+
 function Create-ContactLists {
 	param (
 		[int]$ContactListSize,
-		[int]$ChunkSize
+		[int]$ChunkSize,
+		[switch]$OneImagePerLevel
 	)
 
 	Write-Section "Creating Contact Lists"
@@ -15,7 +18,13 @@ function Create-ContactLists {
         $currentDirectory = $currentDirectory + '\'
     }
 
-	$directoriesWithImages = Get-DirectoriesWithImages
+	$directoriesWithImages = if ($OneImagePerLevel.IsPresent)
+		{
+			Get-ChildItem -Path . -Directory
+		} else {
+			Get-DirectoriesWithImages
+		}
+
 	$totalDirs = $directoriesWithImages.Count
 	$currentDir = 1
 
@@ -28,8 +37,18 @@ function Create-ContactLists {
 
 		Write-Log "$directoryPrefix Started processing..."
 
-		$images = Get-SupportedImages "$path" | Sort-Object Name
-		$imagePaths = @(Extract-RelativePaths $path $images)
+		if ($OneImagePerLevel.IsPresent) {
+				$dirs = Get-ChildItem -Path $path -Recurse -Directory
+				$selectedImages = @()
+				foreach ($dir in $dirs + (Get-Item $path)) {
+						$img = Get-ChildItem -Path $dir.FullName -File | Where-Object { $_.Extension.ToLower() -match '\.jpg|\.jpeg|\.png' } | Select-Object -First 1
+						if ($img) { $selectedImages += $img }
+				}
+				$imagePaths = @(Extract-RelativePaths $path $selectedImages)
+		} else {
+				$images = Get-SupportedImages "$path" | Sort-Object Name
+				$imagePaths = @(Extract-RelativePaths $path $images)
+		}
 
 		$contactLists = @()
 
@@ -94,13 +113,11 @@ function Create-ContactLists {
 		if (Test-Path -LiteralPath "./$directoryName.zip") {
 			Write-Warning "$directoryPrefix Archive with the directory name already exists. Skipped the step"
 		} else {
-			$compress = @{
-				LiteralPath = Get-ChildItem -LiteralPath $path | ForEach-Object { $_.FullName }
-				CompressionLevel = "Fastest"
-				DestinationPath = "$($path).zip"
-			}
+			# CompressionLevel: Optimal / Fastest / NoCompression
+			[System.IO.Compression.CompressionLevel]$level = [System.IO.Compression.CompressionLevel]::Fastest
 
-			Compress-Archive @compress
+			# includeBaseDirectory = $false -> в архив попадёт только содержимое папки
+			[System.IO.Compression.ZipFile]::CreateFromDirectory($path, "$($path).zip", $level, $false)
 	
 			Write-Success "$directoryPrefix Compressed directory"
 		}
