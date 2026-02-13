@@ -2,6 +2,7 @@ import json
 import os
 import sys
 from datetime import datetime
+import argparse
 import yt_dlp
 from tqdm import tqdm
 
@@ -19,6 +20,11 @@ class TqdmLogger:
     def info(self, msg):
         tqdm.write(f"ℹ️  {msg}")
 
+# Parse command line arguments
+parser = argparse.ArgumentParser(description="Process TikTok favorites")
+parser.add_argument("--retry-failed", action="store_true", default=False, help="Retry processing items that previously failed (success=False)")
+args = parser.parse_args()
+
 DATA_FILE = os.path.join("temp", "data.json")
 OUTPUT_FILE = os.path.join("temp", "output.json")
 
@@ -30,10 +36,19 @@ with open(DATA_FILE, "r", encoding="utf-8") as f:
     data = json.load(f)
 
 try:
+    # Statistics
+    stats_total = 0
+    stats_ignored = 0
+    stats_success = 0
+    stats_error = 0
+
     if "ItemFavoriteList" in data and isinstance(data["ItemFavoriteList"], list):
         for item in tqdm(data["ItemFavoriteList"], desc="Processing", unit="elem."):
             if isinstance(item, dict):
-                if "processed" in item and item.get("processed") == True:
+                stats_total += 1
+
+                if item.get("processed") == True and (item.get("success") == True or args.retry_failed == False):
+                    stats_ignored += 1
                     continue
 
                 date = item.get('date')
@@ -55,10 +70,12 @@ try:
                         item["id"] = info.get('id')
                         item["title"] = info.get('title')
                         item["success"] = True
+                        stats_success += 1
                         tqdm.write(f"✅ Success: {info.get('title')}")
                     except Exception as e:
                         item["error"] = str(e)
                         item["success"] = False
+                        stats_error += 1
 
                 item["processed"] = True
 
@@ -85,3 +102,9 @@ try:
         print(f"✅ Files successfully updated:\n   data.json -> {backup_name}\n   output.json -> data.json")
 except OSError as e:
     print(f"❌ Error renaming files: {e}")
+
+print(f"\nStatistics:")
+print(f"Total:   {stats_total}")
+print(f"Ignored: {stats_ignored}")
+print(f"Success: {stats_success}")
+print(f"Errors:  {stats_error}")
