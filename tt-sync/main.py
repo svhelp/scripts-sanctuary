@@ -23,10 +23,73 @@ class TqdmLogger:
 # Parse command line arguments
 parser = argparse.ArgumentParser(description="Process TikTok favorites")
 parser.add_argument("--retry-failed", action="store_true", default=False, help="Retry processing items that previously failed (success=False)")
+parser.add_argument("--mode", choices=["merge", "download", "all"], default="all", help="Operation mode: merge (update from update.json), download (download videos), or all (both)")
 args = parser.parse_args()
 
 DATA_FILE = os.path.join("temp", "data.json")
 OUTPUT_FILE = os.path.join("temp", "output.json")
+UPDATE_FILE = os.path.join("temp", "update.json")
+
+def merge_update():
+    if not os.path.exists(UPDATE_FILE):
+        if args.mode == "merge":
+            print(f"Error: Update file '{UPDATE_FILE}' not found.")
+        return
+
+    print(f"Merging data from '{UPDATE_FILE}'...")
+    
+    if not os.path.exists(DATA_FILE):
+        print(f"Data file '{DATA_FILE}' not found, creating new one.")
+        data = {"ItemFavoriteList": []}
+    else:
+        with open(DATA_FILE, "r", encoding="utf-8") as f:
+            data = json.load(f)
+
+    with open(UPDATE_FILE, "r", encoding="utf-8") as f:
+        update_data = json.load(f)
+        
+    # Finding items in update_data (handle TikTok export structure)
+    new_items = []
+    if "ItemFavoriteList" in update_data:
+       new_items = update_data["ItemFavoriteList"]
+    else:
+        print("Could not find 'ItemFavoriteList' in update.json")
+        return
+
+    if "ItemFavoriteList" not in data:
+        data["ItemFavoriteList"] = []
+
+    existing_links = {item.get("link") for item in data["ItemFavoriteList"] if item.get("link")}
+    
+    added_count = 0
+    for item in new_items:
+        # Handle key capitalization (Link -> link, Date -> date)
+        link = item.get("Link") or item.get("link")
+        date = item.get("Date") or item.get("date")
+        
+        if link and link not in existing_links:
+            new_entry = {
+                "link": link,
+                "date": date
+            }
+            data["ItemFavoriteList"].append(new_entry)
+            existing_links.add(link)
+            added_count += 1
+            
+    if added_count > 0:
+        with open(DATA_FILE, "w", encoding="utf-8") as f:
+            json.dump(data, f, indent=2, ensure_ascii=False)
+        print(f"✅ Successfully added {added_count} new items to data.json.")
+    else:
+        print("No new items found to merge.")
+
+# Execute merge if needed
+if args.mode in ["merge", "all"]:
+    merge_update()
+
+if args.mode == "merge":
+    print("Merge mode complete.")
+    sys.exit(0)
 
 if not os.path.exists(DATA_FILE):
     print(f"Error: File '{DATA_FILE}' not found.")
