@@ -23,12 +23,30 @@ class TqdmLogger:
 # Parse command line arguments
 parser = argparse.ArgumentParser(description="Process TikTok favorites")
 parser.add_argument("--retry-failed", action="store_true", default=False, help="Retry processing items that previously failed (success=False)")
+parser.add_argument("--retry-error-content", type=str, metavar="snippet", help="Only retry items where the error message contains this text")
 parser.add_argument("--mode", choices=["merge", "download", "all"], default="all", help="Operation mode: merge (update from update.json), download (download videos), or all (both)")
 args = parser.parse_args()
 
 DATA_FILE = os.path.join("temp", "data.json")
 OUTPUT_FILE = os.path.join("temp", "output.json")
 UPDATE_FILE = os.path.join("temp", "update.json")
+
+# Cookies file handling
+SECRETS_DIR = "secrets"
+COOKIES_FILES = ["www.tiktok.com_cookies.txt", "cookies.txt"]
+COOKIES_PATH = None
+
+if os.path.exists(SECRETS_DIR):
+    for cookie_file in COOKIES_FILES:
+        path = os.path.join(SECRETS_DIR, cookie_file)
+        if os.path.exists(path):
+            COOKIES_PATH = path
+            break
+
+if COOKIES_PATH:
+    print(f"Using cookies from: {COOKIES_PATH}")
+else:
+    print("No cookies file found in secrets directory.")
 
 def merge_update():
     if not os.path.exists(UPDATE_FILE):
@@ -110,9 +128,18 @@ try:
             if isinstance(item, dict):
                 stats_total += 1
 
-                if item.get("processed") == True and (item.get("success") == True or args.retry_failed == False):
-                    stats_ignored += 1
-                    continue
+                if item.get("processed") == True:
+                    if not args.retry_failed or item.get("success") == True:
+                        stats_ignored += 1
+                        continue
+
+                    if args.retry_error_content:
+                        # If retry_error_content is specified, check if it's in the error message
+                        error_msg = item.get("error", "")
+                        if not args.retry_error_content in error_msg:
+                            # print(f"Error: '{error_msg}' Part: '{args.retry_error_content}'.")
+                            stats_ignored += 1
+                            continue
 
                 date = item.get('date')
                 link = item.get('link')
@@ -123,6 +150,9 @@ try:
                     'outtmpl': f'storage/{date}_%(uploader)s_%(id)s.%(ext)s',
                     "logger": TqdmLogger(),  # 👈 redirect output here
                 }
+                
+                if COOKIES_PATH:
+                    ydl_opts["cookiefile"] = COOKIES_PATH
 
                 with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                     try:
