@@ -148,7 +148,10 @@ try:
                 
                 ydl_opts = {
                     'outtmpl': f'storage/{date}_%(uploader)s_%(id)s.%(ext)s',
-                    "logger": TqdmLogger(),  # 👈 redirect output here
+                    'impersonate': yt_dlp.ImpersonateTarget(client='chrome', os='windows'),
+                    'verbose': True,
+                    #'extractor_args': ,
+                    'logger': TqdmLogger(),  # 👈 redirect output here
                 }
                 
                 if COOKIES_PATH:
